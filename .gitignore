@@ -1,0 +1,47 @@
+# Python virtual environment
+backend/venv/
+venv/
+ENV/
+env/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment variables & secrets
+.env
+backend/.env
+*.env.local
+
+# Database
+backend/data/*.db
+*.sqlite3
+*.db
+
+# Uploaded user media (videos & custom covers)
+uploads/videos/*
+!uploads/videos/.gitkeep
+uploads/covers/*
+!uploads/covers/.gitkeep
+sample_reels/
+
+# Node & Frontend dependencies
+frontend/node_modules/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite build output
+frontend/dist/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
