@@ -14,11 +14,13 @@ import {
   Sparkles,
   ExternalLink,
   RefreshCw,
-  Plus
+  Plus,
+  Sliders
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { videoApi } from '../services/api';
 import VideoEditModal from '../components/VideoEditModal';
+import BatchQueueModal from '../components/BatchQueueModal';
 
 export default function QueueDashboard({
   videos,
@@ -32,6 +34,7 @@ export default function QueueDashboard({
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
   const [previewingVideoUrl, setPreviewingVideoUrl] = useState(null);
+  const [showBatchModal, setShowBatchModal] = useState(false);
 
   // Filtered videos
   const filteredVideos = videos.filter((v) => {
@@ -244,6 +247,16 @@ export default function QueueDashboard({
           >
             <RefreshCw size={16} />
           </button>
+          {pendingVideos.length > 0 && (
+            <button
+              onClick={() => setShowBatchModal(true)}
+              className="px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-pink-500/50 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              title="Batch edit pending reels (Cover page, Sequential captions)"
+            >
+              <Sliders size={14} className="text-pink-400" />
+              <span>Batch Edit ({pendingVideos.length})</span>
+            </button>
+          )}
           <button
             onClick={onOpenUpload}
             className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl instagram-gradient hover:opacity-95 text-white font-semibold text-xs shadow-md shadow-pink-500/20 flex items-center justify-center gap-1.5 transition-all"
@@ -455,6 +468,23 @@ export default function QueueDashboard({
           onClose={() => setEditingVideo(null)}
           onSaveSuccess={() => {
             setEditingVideo(null);
+            onRefresh();
+          }}
+        />
+      )}
+
+      {/* Batch Edit Modal */}
+      {showBatchModal && (
+        <BatchQueueModal
+          pendingVideos={pendingVideos}
+          onClose={() => setShowBatchModal(false)}
+          onSuccess={() => {
+            setShowBatchModal(false);
+            setActionSuccess(
+              `Successfully updated ${pendingVideos.length} pending reel${
+                pendingVideos.length > 1 ? 's' : ''
+              }!`
+            );
             onRefresh();
           }}
         />

@@ -175,12 +175,18 @@ async def update_video(
 
     if remove_cover:
         if video.cover_filename:
-            old_path = os.path.join(COVERS_DIR, video.cover_filename)
-            if os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception:
-                    pass
+            other_using = (
+                db.query(Video)
+                .filter(Video.id != video.id, Video.cover_filename == video.cover_filename)
+                .first()
+            )
+            if not other_using:
+                old_path = os.path.join(COVERS_DIR, video.cover_filename)
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                    except Exception:
+                        pass
             video.cover_filename = None
 
     if cover_file and cover_file.filename:
@@ -228,12 +234,18 @@ def delete_video(
             pass
 
     if video.cover_filename:
-        c_path = os.path.join(COVERS_DIR, video.cover_filename)
-        if os.path.exists(c_path):
-            try:
-                os.remove(c_path)
-            except Exception:
-                pass
+        other_using = (
+            db.query(Video)
+            .filter(Video.id != video.id, Video.cover_filename == video.cover_filename)
+            .first()
+        )
+        if not other_using:
+            c_path = os.path.join(COVERS_DIR, video.cover_filename)
+            if os.path.exists(c_path):
+                try:
+                    os.remove(c_path)
+                except Exception:
+                    pass
 
     db.delete(video)
     db.commit()
