@@ -1,5 +1,6 @@
 import { Film, UploadCloud, Clock, FileText, LogOut, CheckCircle2, AlertTriangle, XCircle, ShieldAlert } from 'lucide-react';
 import InstagramIcon from './InstagramIcon';
+import { formatScheduleInterval } from '../utils/formatters';
 
 export default function Navbar({ activeTab, setActiveTab, onLogout, igStatus, scheduleInfo, pendingCount }) {
   const getStatusBadge = () => {
@@ -121,7 +122,7 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, igStatus, sc
           {scheduleInfo && (
             <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs bg-slate-900 border border-slate-800 text-slate-300">
               <Clock size={12} className="text-pink-400" />
-              <span>Interval: <strong>{scheduleInfo.interval_hours}h</strong></span>
+              <span>Interval: <strong>{formatScheduleInterval(scheduleInfo)}</strong></span>
             </div>
           )}
 

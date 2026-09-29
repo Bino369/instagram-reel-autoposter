@@ -58,9 +58,13 @@ class InstagramSettingsResponse(BaseModel):
     last_error: Optional[str] = None
 
 class ScheduleSettingsRequest(BaseModel):
-    interval_hours: int = Field(gt=0, description="Interval in hours between automatic posts")
+    interval_hours: Optional[int] = Field(0, ge=0, description="Hours component of interval")
+    interval_minutes: Optional[int] = Field(0, ge=0, description="Minutes component of interval")
+    total_minutes: Optional[int] = Field(None, ge=1, description="Optional total minutes interval")
 
 class ScheduleSettingsResponse(BaseModel):
     interval_hours: int
+    interval_minutes: int
+    total_minutes: int
     next_run_time: Optional[datetime] = None
     is_active: bool

@@ -19,7 +19,14 @@ from schemas import (
 from auth import authenticate_user, verify_token
 from crypto import encrypt_val, decrypt_val
 from ig_poster import post_video_by_id, get_ig_client, get_setting_val, set_setting_val
-from scheduler import start_scheduler, update_scheduler_interval, get_next_run_time, get_interval_hours
+from scheduler import (
+    start_scheduler,
+    update_scheduler_interval,
+    get_next_run_time,
+    get_interval_hours,
+    get_interval_minutes,
+    get_interval_breakdown,
+)
 from config import UPLOADS_DIR, VIDEOS_DIR, COVERS_DIR
 
 # Create database tables
@@ -43,7 +50,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 def on_startup():
     start_scheduler()
 
-def format_video_response(video: Video, interval_hours: int, pending_start_index: int = 0) -> VideoResponse:
+def format_video_response(video: Video, interval_minutes: int, pending_start_index: int = 0) -> VideoResponse:
     video_url = f"/uploads/videos/{video.filename}"
     cover_url = f"/uploads/covers/{video.cover_filename}" if video.cover_filename else None
     
@@ -51,7 +58,7 @@ def format_video_response(video: Video, interval_hours: int, pending_start_index
     scheduled = video.scheduled_at
     if video.status == "Pending" and not scheduled:
         next_run = get_next_run_time() or (datetime.now() + timedelta(minutes=5))
-        scheduled = next_run + timedelta(hours=interval_hours * pending_start_index)
+        scheduled = next_run + timedelta(minutes=interval_minutes * pending_start_index)
 
     return VideoResponse(
         id=video.id,
@@ -89,7 +96,7 @@ def get_me(username: str = Depends(verify_token)):
 @app.get("/api/videos", response_model=List[VideoResponse])
 def list_videos(db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
     videos = db.query(Video).order_by(Video.queue_number.asc()).all()
-    interval = get_interval_hours(db)
+    interval = get_interval_minutes(db)
     
     result = []
     pending_idx = 0
@@ -124,7 +131,7 @@ async def upload_videos(
             shutil.copyfileobj(cover_file.file, buffer)
 
     created_videos = []
-    interval = get_interval_hours(db)
+    interval = get_interval_minutes(db)
 
     for idx, file in enumerate(files):
         if not file.filename:
@@ -199,7 +206,7 @@ async def update_video(
 
     db.commit()
     db.refresh(video)
-    interval = get_interval_hours(db)
+    interval = get_interval_minutes(db)
     return format_video_response(video, interval, 0)
 
 @app.post("/api/videos/reorder")
@@ -263,11 +270,11 @@ def post_now(
 
     try:
         updated_video = post_video_by_id(db, video_id)
-        interval = get_interval_hours(db)
+        interval = get_interval_minutes(db)
         return format_video_response(updated_video, interval, 0)
     except Exception as e:
         db.refresh(video)
-        interval = get_interval_hours(db)
+        interval = get_interval_minutes(db)
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -331,12 +338,14 @@ def save_instagram_settings(
 
 @app.get("/api/settings/schedule", response_model=ScheduleSettingsResponse)
 def get_schedule_settings(db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
-    hours = get_interval_hours(db)
+    hours, mins, total = get_interval_breakdown(db)
     next_run = get_next_run_time()
     enabled = get_setting_val(db, "schedule_enabled") != "false"
 
     return ScheduleSettingsResponse(
         interval_hours=hours,
+        interval_minutes=mins,
+        total_minutes=total,
         next_run_time=next_run,
         is_active=enabled
     )
@@ -347,12 +356,25 @@ def save_schedule_settings(
     db: Session = Depends(get_db),
     current_user: str = Depends(verify_token)
 ):
-    set_setting_val(db, "interval_hours", str(payload.interval_hours))
-    update_scheduler_interval(payload.interval_hours)
+    if payload.total_minutes is not None:
+        total = max(1, payload.total_minutes)
+    else:
+        h = payload.interval_hours if payload.interval_hours is not None else 0
+        m = payload.interval_minutes if payload.interval_minutes is not None else 0
+        total = max(1, h * 60 + m)
+
+    hours = total // 60
+    mins = total % 60
+
+    set_setting_val(db, "interval_minutes", str(total))
+    set_setting_val(db, "interval_hours", str(hours if hours > 0 else 1))
+    update_scheduler_interval(total)
 
     next_run = get_next_run_time()
     return ScheduleSettingsResponse(
-        interval_hours=payload.interval_hours,
+        interval_hours=hours,
+        interval_minutes=mins,
+        total_minutes=total,
         next_run_time=next_run,
         is_active=True
     )

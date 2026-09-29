@@ -21,6 +21,7 @@ import confetti from 'canvas-confetti';
 import { videoApi } from '../services/api';
 import VideoEditModal from '../components/VideoEditModal';
 import BatchQueueModal from '../components/BatchQueueModal';
+import { formatScheduleInterval } from '../utils/formatters';
 
 export default function QueueDashboard({
   videos,
@@ -190,7 +191,7 @@ export default function QueueDashboard({
           <div>
             <p className="text-xs font-semibold text-pink-400 uppercase tracking-wider">Interval</p>
             <p className="text-xl font-bold text-white mt-1">
-              Every {scheduleInfo?.interval_hours || 6}h
+              Every {formatScheduleInterval(scheduleInfo)}
             </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400">

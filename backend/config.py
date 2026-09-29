@@ -19,3 +19,4 @@ ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "gAAAAABl_secret_fernet_key_placeho
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
+DEFAULT_POST_INTERVAL_MINUTES = int(os.getenv("DEFAULT_POST_INTERVAL_MINUTES", "360"))

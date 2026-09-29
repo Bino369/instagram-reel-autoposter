@@ -89,8 +89,12 @@ export const settingsApi = {
     const res = await api.get('/settings/schedule');
     return res.data;
   },
-  saveSchedule: async (interval_hours) => {
-    const res = await api.post('/settings/schedule', { interval_hours });
+  saveSchedule: async (data) => {
+    const payload =
+      typeof data === 'number'
+        ? { interval_hours: data, interval_minutes: 0 }
+        : data;
+    const res = await api.post('/settings/schedule', payload);
     return res.data;
   },
 };

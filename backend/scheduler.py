@@ -35,45 +35,65 @@ def auto_post_next_job():
     finally:
         db.close()
 
-def get_interval_hours(db) -> int:
-    setting = db.query(Setting).filter(Setting.key == "interval_hours").first()
-    if setting and setting.value:
+from config import DEFAULT_POST_INTERVAL_MINUTES
+
+def get_interval_minutes(db) -> int:
+    setting_min = db.query(Setting).filter(Setting.key == "interval_minutes").first()
+    if setting_min and setting_min.value:
         try:
-            return max(1, int(setting.value))
+            return max(1, int(setting_min.value))
         except ValueError:
             pass
-    return 6
+
+    setting_hr = db.query(Setting).filter(Setting.key == "interval_hours").first()
+    if setting_hr and setting_hr.value:
+        try:
+            return max(1, int(setting_hr.value) * 60)
+        except ValueError:
+            pass
+
+    return DEFAULT_POST_INTERVAL_MINUTES
+
+def get_interval_breakdown(db) -> tuple[int, int, int]:
+    total_minutes = get_interval_minutes(db)
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    return hours, minutes, total_minutes
+
+def get_interval_hours(db) -> int:
+    total_minutes = get_interval_minutes(db)
+    return max(1, total_minutes // 60) if total_minutes >= 60 else 1
 
 def start_scheduler():
     db = SessionLocal()
     try:
-        hours = get_interval_hours(db)
+        total_mins = get_interval_minutes(db)
         if not scheduler.running:
             scheduler.add_job(
                 auto_post_next_job,
                 "interval",
-                hours=hours,
+                minutes=total_mins,
                 id=JOB_ID,
                 replace_existing=True,
                 next_run_time=datetime.now() + timedelta(seconds=10) # Start first check 10 seconds after server launch
             )
             scheduler.start()
-            logger.info(f"Scheduler started with interval of {hours} hours.")
+            logger.info(f"Scheduler started with interval of {total_mins} minutes.")
     finally:
         db.close()
 
-def update_scheduler_interval(hours: int):
-    if hours < 1:
-        hours = 1
+def update_scheduler_interval(minutes: int):
+    if minutes < 1:
+        minutes = 1
     if scheduler.running:
         if scheduler.get_job(JOB_ID):
-            scheduler.reschedule_job(JOB_ID, trigger="interval", hours=hours)
-            logger.info(f"Rescheduled job to run every {hours} hours.")
+            scheduler.reschedule_job(JOB_ID, trigger="interval", minutes=minutes)
+            logger.info(f"Rescheduled job to run every {minutes} minutes.")
         else:
             scheduler.add_job(
                 auto_post_next_job,
                 "interval",
-                hours=hours,
+                minutes=minutes,
                 id=JOB_ID,
                 replace_existing=True
             )
