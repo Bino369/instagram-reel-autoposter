@@ -35,35 +35,72 @@ def set_setting_val(db: Session, key: str, value: str, encrypted: bool = False):
         db.add(setting)
     db.commit()
 
-def get_ig_client(db: Session) -> tuple[Client, str]:
+def get_ig_client(db: Session, force_login: bool = False) -> tuple[Client, str]:
     """
-    Creates and authenticates instagrapi Client using saved credentials & session.
+    Creates and authenticates instagrapi Client using saved credentials or session.
+    Supports both Session ID login (bypasses mobile version blocks and 2FA)
+    and traditional Username/Password login.
     Returns (cl, username).
     """
     username = get_setting_val(db, "ig_username")
     password = get_setting_val(db, "ig_password", encrypted=True)
+    sessionid = get_setting_val(db, "ig_sessionid", encrypted=True)
+    login_type = get_setting_val(db, "ig_login_type") or ("sessionid" if sessionid else "password")
 
-    if not username or not password:
+    if not (sessionid or (username and password)):
         set_setting_val(db, "ig_status", "Not configured")
-        raise ValueError("Instagram username and password are not configured in settings.")
+        raise ValueError("Instagram credentials or Session ID are not configured in settings.")
 
     cl = Client()
-    # Apply custom user-agent or settings if saved
+    cl.request_timeout = 25
+
+    # Check for cached valid session settings
     session_json = get_setting_val(db, "ig_session", encrypted=True)
-    if session_json:
+    if session_json and not force_login:
         try:
             settings_dict = json.loads(session_json)
             cl.set_settings(settings_dict)
-            logger.info("Loaded existing Instagram session settings.")
+            try:
+                # Lightweight check to ensure session is alive
+                uid = cl.user_id
+                if uid:
+                    logger.info(f"Reusing active Instagram session for user {username or uid}.")
+                    return cl, username or cl.username or "instagram_user"
+            except Exception as check_err:
+                logger.warning(f"Cached session validation failed ({check_err}). Re-authenticating...")
         except Exception as e:
-            logger.warning(f"Failed to load session settings: {e}")
+            logger.warning(f"Failed to load cached session settings: {e}")
 
+    # Authenticate via Session ID
+    if login_type == "sessionid" or (sessionid and (not username or not password)):
+        clean_sid = sessionid.strip().strip('"').strip("'")
+        try:
+            logger.info("Authenticating Instagram client via Session ID...")
+            cl.login_by_sessionid(clean_sid)
+            resolved_username = cl.username or username or "instagram_user"
+            set_setting_val(db, "ig_username", resolved_username)
+            set_setting_val(db, "ig_login_type", "sessionid")
+            set_setting_val(db, "ig_session", json.dumps(cl.get_settings()), encrypted=True)
+            set_setting_val(db, "ig_status", "Connected")
+            set_setting_val(db, "ig_last_error", "")
+            return cl, resolved_username
+        except Exception as e:
+            err_msg = str(e)
+            if "Invalid sessionid" in err_msg:
+                err_msg = "Invalid Session ID. Make sure to copy the full cookie value starting with your numeric User ID (e.g. 68912345678%3A...)."
+            logger.error(f"Session ID login failed: {err_msg}")
+            set_setting_val(db, "ig_status", "Needs re-login")
+            set_setting_val(db, "ig_last_error", err_msg)
+            raise Exception(f"Instagram authentication failed: {err_msg}")
+
+    # Authenticate via Username & Password
     try:
+        logger.info(f"Authenticating Instagram client for user @{username}...")
         logged_in = cl.login(username, password)
         if logged_in:
-            # Save updated session settings
             updated_settings = cl.get_settings()
             set_setting_val(db, "ig_session", json.dumps(updated_settings), encrypted=True)
+            set_setting_val(db, "ig_login_type", "password")
             set_setting_val(db, "ig_status", "Connected")
             set_setting_val(db, "ig_last_error", "")
             return cl, username
@@ -72,21 +109,23 @@ def get_ig_client(db: Session) -> tuple[Client, str]:
             raise Exception("Login returned False without exception")
 
     except TwoFactorRequired as e:
-        msg = f"2FA required for user {username}: {str(e)}"
+        msg = f"2FA required for user @{username}: {str(e)}. Tip: Switch to 'Session ID' tab to bypass 2FA easily."
         set_setting_val(db, "ig_status", "2FA required")
         set_setting_val(db, "ig_last_error", msg)
         raise Exception(msg)
     except BadPassword:
-        msg = f"Invalid password for user {username}"
+        msg = f"Invalid password for user @{username}"
         set_setting_val(db, "ig_status", "Needs re-login")
         set_setting_val(db, "ig_last_error", msg)
         raise Exception(msg)
-    except PleaseWaitFewMinutes as e:
-        msg = "Instagram rate-limit reached. Please wait a few minutes."
+    except PleaseWaitFewMinutes:
+        msg = "Instagram rate-limit reached. Please wait a few minutes or connect via Session ID."
         set_setting_val(db, "ig_last_error", msg)
         raise Exception(msg)
     except Exception as e:
         err_msg = str(e)
+        if "out of date" in err_msg.lower() or "upgrade your app" in err_msg.lower():
+            err_msg = "Instagram blocked password login ('Version out of date'). Please switch to the 'Session ID' tab to connect without restrictions."
         set_setting_val(db, "ig_status", "Needs re-login" if "login" in err_msg.lower() else "Error")
         set_setting_val(db, "ig_last_error", err_msg)
         raise Exception(f"Instagram authentication failed: {err_msg}")

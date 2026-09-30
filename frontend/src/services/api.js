@@ -81,8 +81,12 @@ export const settingsApi = {
     const res = await api.get('/settings/instagram');
     return res.data;
   },
-  saveInstagram: async (username, password) => {
-    const res = await api.post('/settings/instagram', { username, password });
+  saveInstagram: async (payloadOrUsername, password) => {
+    const payload =
+      typeof payloadOrUsername === 'object' && payloadOrUsername !== null
+        ? payloadOrUsername
+        : { username: payloadOrUsername, password };
+    const res = await api.post('/settings/instagram', payload);
     return res.data;
   },
   getSchedule: async () => {

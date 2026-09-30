@@ -48,14 +48,16 @@ class LogResponse(BaseModel):
         from_attributes = True
 
 class InstagramSettingsRequest(BaseModel):
-    username: str
+    username: Optional[str] = None
     password: Optional[str] = None # Optional if updating only username or status check
+    sessionid: Optional[str] = None # Direct session cookie login to bypass version/2FA checks
 
 class InstagramSettingsResponse(BaseModel):
     username: str
     is_configured: bool
     status: str # Connected, Needs re-login, 2FA required, Not configured
     last_error: Optional[str] = None
+    login_type: Optional[str] = "password"
 
 class ScheduleSettingsRequest(BaseModel):
     interval_hours: Optional[int] = Field(0, ge=0, description="Hours component of interval")

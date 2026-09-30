@@ -292,14 +292,18 @@ def get_logs(db: Session = Depends(get_db), current_user: str = Depends(verify_t
 def get_instagram_settings(db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
     username = get_setting_val(db, "ig_username")
     password = get_setting_val(db, "ig_password", encrypted=True)
-    status_val = get_setting_val(db, "ig_status") or ("Connected" if (username and password) else "Not configured")
+    sessionid = get_setting_val(db, "ig_sessionid", encrypted=True)
+    login_type = get_setting_val(db, "ig_login_type") or ("sessionid" if sessionid else "password")
+    is_conf = bool(sessionid or (username and password))
+    status_val = get_setting_val(db, "ig_status") or ("Connected" if is_conf else "Not configured")
     last_error = get_setting_val(db, "ig_last_error")
 
     return InstagramSettingsResponse(
         username=username or "",
-        is_configured=bool(username and password),
+        is_configured=is_conf,
         status=status_val,
-        last_error=last_error or None
+        last_error=last_error or None,
+        login_type=login_type
     )
 
 @app.post("/api/settings/instagram", response_model=InstagramSettingsResponse)
@@ -308,32 +312,49 @@ def save_instagram_settings(
     db: Session = Depends(get_db),
     current_user: str = Depends(verify_token)
 ):
-    set_setting_val(db, "ig_username", payload.username)
+    if payload.sessionid:
+        clean_sid = payload.sessionid.strip().strip('"').strip("'")
+        set_setting_val(db, "ig_sessionid", clean_sid, encrypted=True)
+        set_setting_val(db, "ig_login_type", "sessionid")
+        set_setting_val(db, "ig_session", "")
+
+    if payload.username is not None:
+        set_setting_val(db, "ig_username", payload.username.strip())
+
     if payload.password:
         set_setting_val(db, "ig_password", payload.password, encrypted=True)
+        set_setting_val(db, "ig_login_type", "password")
+        set_setting_val(db, "ig_session", "")
 
-    # Test login connection if credentials present
+    username = get_setting_val(db, "ig_username")
+    password = get_setting_val(db, "ig_password", encrypted=True)
+    sessionid = get_setting_val(db, "ig_sessionid", encrypted=True)
+    login_type = get_setting_val(db, "ig_login_type") or ("sessionid" if sessionid else "password")
+
     status_val = "Not configured"
     last_err = ""
 
-    if payload.username and (payload.password or get_setting_val(db, "ig_password", encrypted=True)):
-        if payload.username == "demo_account":
+    if username == "demo_account":
+        status_val = "Connected"
+        set_setting_val(db, "ig_status", "Connected")
+        set_setting_val(db, "ig_last_error", "")
+    elif sessionid or (username and password):
+        try:
+            cl, authenticated_user = get_ig_client(db, force_login=True)
+            username = authenticated_user
             status_val = "Connected"
-            set_setting_val(db, "ig_status", "Connected")
-            set_setting_val(db, "ig_last_error", "")
-        else:
-            try:
-                cl, username = get_ig_client(db)
-                status_val = "Connected"
-            except Exception as e:
-                last_err = str(e)
-                status_val = get_setting_val(db, "ig_status") or "Needs re-login"
+            last_err = ""
+        except Exception as e:
+            last_err = str(e)
+            status_val = get_setting_val(db, "ig_status") or "Needs re-login"
 
+    is_conf = bool(sessionid or (username and password))
     return InstagramSettingsResponse(
-        username=payload.username,
-        is_configured=bool(payload.username),
+        username=username or "",
+        is_configured=is_conf,
         status=status_val,
-        last_error=last_err or None
+        last_error=last_err or None,
+        login_type=login_type
     )
 
 @app.get("/api/settings/schedule", response_model=ScheduleSettingsResponse)
